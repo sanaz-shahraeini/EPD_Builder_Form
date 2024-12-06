@@ -2,20 +2,28 @@ import React from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import App from '../App';
 import ProductCreation from '../components/product/ProductCreation';
+import ErrorBoundary from '../components/ErrorBoundary';
 
-export const router = createBrowserRouter([
+const router = createBrowserRouter([
   {
     path: '/',
-    element: <App />,
+    element: (
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    ),
+    errorElement: <ErrorBoundary />,
     children: [
       {
         path: '/create-product',
-        element: <ProductCreation />,
+        element: (
+          <ErrorBoundary>
+            <ProductCreation />
+          </ErrorBoundary>
+        ),
       },
-      {
-        path: '/epd-builder',
-        element: <App />,
-      }
-    ]
-  }
+    ],
+  },
 ]);
+
+export default router;

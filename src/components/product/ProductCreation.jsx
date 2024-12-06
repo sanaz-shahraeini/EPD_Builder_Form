@@ -1,21 +1,129 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { MapPinIcon } from '@heroicons/react/24/outline';
+import useGoogleMaps from '../../hooks/useGoogleMaps';
 
 const ProductCreation = () => {
-  const { register, handleSubmit } = useForm();
+  const { register, handleSubmit, setValue, watch } = useForm();
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const mapContainerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const { isLoaded, error } = useGoogleMaps();
+
+  const countries = [
+    { code: 'ES', name: 'Spain' },
+    { code: 'FR', name: 'France' },
+    { code: 'DE', name: 'Germany' },
+    { code: 'IT', name: 'Italy' },
+    { code: 'UK', name: 'United Kingdom' },
+    { code: 'PT', name: 'Portugal' },
+    { code: 'NL', name: 'Netherlands' },
+    { code: 'BE', name: 'Belgium' },
+    { code: 'CH', name: 'Switzerland' },
+    { code: 'AT', name: 'Austria' }
+  ];
+
+  const selectedCountry = watch('supplierCountry');
+
+  useEffect(() => {
+    if (!isLoaded || !mapContainerRef.current || mapRef.current) return;
+
+    const defaultLocation = { lat: 40.4168, lng: -3.7038 }; // Madrid, Spain
+    
+    // Initialize map
+    mapRef.current = new window.google.maps.Map(mapContainerRef.current, {
+      center: defaultLocation,
+      zoom: 6,
+      styles: [
+        {
+          featureType: "administrative",
+          elementType: "geometry",
+          stylers: [{ visibility: "simplified" }]
+        }
+      ]
+    });
+
+    // Initialize marker
+    markerRef.current = new window.google.maps.Marker({
+      position: defaultLocation,
+      map: mapRef.current,
+      draggable: true
+    });
+
+    // Add event listeners
+    mapRef.current.addListener('click', handleMapClick);
+    markerRef.current.addListener('dragend', handleMarkerDragEnd);
+
+    // Cleanup function
+    return () => {
+      if (mapRef.current) {
+        window.google.maps.event.clearInstanceListeners(mapRef.current);
+      }
+      if (markerRef.current) {
+        window.google.maps.event.clearInstanceListeners(markerRef.current);
+        markerRef.current.setMap(null);
+      }
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+  }, [isLoaded]);
+
+  const handleMapClick = (e) => {
+    if (!markerRef.current) return;
+    const clickedLocation = e.latLng;
+    markerRef.current.setPosition(clickedLocation);
+    updateLocationInfo(clickedLocation);
+  };
+
+  const handleMarkerDragEnd = () => {
+    if (!markerRef.current) return;
+    const newPosition = markerRef.current.getPosition();
+    updateLocationInfo(newPosition);
+  };
+
+  const updateLocationInfo = async (location) => {
+    if (!window.google?.maps) return;
+    
+    const geocoder = new window.google.maps.Geocoder();
+    try {
+      const response = await geocoder.geocode({ location });
+      if (response.results[0]) {
+        const addressComponents = response.results[0].address_components;
+        const country = addressComponents.find(
+          component => component.types.includes('country')
+        );
+        
+        if (country) {
+          const matchingCountry = countries.find(
+            c => c.name.toLowerCase() === country.long_name.toLowerCase()
+          );
+          
+          if (matchingCountry) {
+            setValue('supplierCountry', matchingCountry.code);
+            
+            const city = addressComponents.find(
+              component => component.types.includes('locality')
+            );
+            if (city) {
+              setValue('city', city.long_name);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error getting location info:', error);
+    }
+  };
 
   const onSubmit = (data) => {
     console.log(data);
-    // Handle form submission
   };
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     setSelectedFile(file);
-    // Simulate upload progress
     let progress = 0;
     const interval = setInterval(() => {
       progress += 10;
@@ -208,14 +316,21 @@ const ProductCreation = () => {
 
               {/* Map */}
               <div className="w-full h-64 bg-gray-100 rounded-lg overflow-hidden">
-                <iframe
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d6239.850994088669!2d-3.7037929665710437!3d40.41677007936275!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xd422997800a3c81%3A0xc436dec1618c2269!2sMadrid%2C%20Spain!5e0!3m2!1sen!2s!4v1637942137212!5m2!1sen!2s"
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  allowFullScreen=""
-                  loading="lazy"
-                ></iframe>
+                <div 
+                  ref={mapContainerRef}
+                  className="w-full h-full relative"
+                >
+                  {!isLoaded && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-terra-blue"></div>
+                    </div>
+                  )}
+                  {error && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-red-500">Failed to load Google Maps</div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </form>
